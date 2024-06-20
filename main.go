@@ -6,9 +6,11 @@ import (
 )
 
 type CharGenNode struct {
-	Char  byte
-	Left  *CharGenNode
-	Right *CharGenNode
+	Char      byte
+	Left      *CharGenNode
+	Right     *CharGenNode
+	CharMap   map[byte]string
+	BinaryMap map[string]byte
 }
 
 func NewCharGenNode(typ string) *CharGenNode {
@@ -38,6 +40,8 @@ func NewCharGenNode(typ string) *CharGenNode {
 		root.Right.Right = &CharGenNode{}
 		root.Right.Right.Left = &CharGenNode{Char: 'g'}
 		root.Right.Right.Right = &CharGenNode{Char: 'h'}
+		root.CharMap = root.MakeCharMap()
+		root.BinaryMap = root.MakeBinaryMap()
 		return root
 	case "3bit-skewed":
 		// this kind of tree is usually constructed
@@ -71,6 +75,8 @@ func NewCharGenNode(typ string) *CharGenNode {
 		}
 		node.Left = &CharGenNode{Char: 'g'}
 		node.Right = &CharGenNode{Char: 'h'}
+		root.CharMap = root.MakeCharMap()
+		root.BinaryMap = root.MakeBinaryMap()
 		return root
 	default:
 		return nil
@@ -104,24 +110,27 @@ func (root *CharGenNode) MakeBinaryMap() map[string]byte {
 }
 
 func (root *CharGenNode) Encode(input []byte) string {
-	charMap := root.MakeCharMap()
-	res := ""
+	res := make([]byte, len(input)*3) // we know the max length
 	for _, char := range input {
-		res += charMap[char]
+		res = append(res, root.CharMap[char]...)
 	}
-	return res
+	return string(res)
 }
 
 func (root *CharGenNode) Decode(input string) []byte {
-	binaryMap := root.MakeBinaryMap()
-	res := make([]byte, 0)
+	res := make([]byte, 0, len(input)/3) // we know the max length
 	for i := 0; i < len(input); {
+		found := false
 		for j := i + 1; j <= len(input); j++ {
-			if char, ok := binaryMap[input[i:j]]; ok {
+			if char, ok := root.BinaryMap[input[i:j]]; ok {
 				res = append(res, char)
 				i = j
+				found = true
 				break
 			}
+		}
+		if !found {
+			i++
 		}
 	}
 	return res
@@ -172,11 +181,14 @@ func (cg CharGen) Sample(count int) []byte {
 }
 
 func main() {
-	fmt.Println("Hello, World!")
-	cg1 := NewCharGen("3bit")
-	samples := cg1.Sample(10)
-	tree := NewCharGenNode("3bit")
-	fmt.Println(samples)
-	fmt.Println(tree.Encode(samples))
-	fmt.Println(tree.Decode(tree.Encode(samples)))
+	// TODO: move stuff on this file to entropy.go
+
+	sampleSize := 100
+	t1 := NewCharGenNode("3bit-skewed")
+	src1 := NewCharGen("3bit-skewed").Sample(sampleSize)
+	fmt.Println(t1.Encode(src1))
+	// entropy: avg amount of bits to encode a char if coding scheme is optimal
+	// cross entropy: how effective is coding scheme optimized for dist A encodes dist B
+	// kl divergence: how much extra bits required to encode dist B with coding scheme optimized for dist A
+	// JointRun()
 }
