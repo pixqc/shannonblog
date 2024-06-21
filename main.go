@@ -1,6 +1,6 @@
 package main
 
 func main() {
-	EntropyRun()
+	// CharGenRun()
 	JointRun()
 }

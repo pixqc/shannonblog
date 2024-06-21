@@ -180,7 +180,7 @@ func (cg CharGen) Sample(count int) []byte {
 	return tmp
 }
 
-func EntropyRun() {
+func CharGenRun() {
 	// entropy: avg amount of bits to encode a char if coding scheme is optimal
 	// cross entropy: how effective is coding scheme optimized for dist A encodes dist B
 	// kl divergence: how much extra bits required to encode dist B with coding scheme optimized for dist A
