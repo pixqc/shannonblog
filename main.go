@@ -71,6 +71,7 @@ func (cg CharGen) Sample(count int) string {
 }
 
 func JoinCharGens(d1, d2 CharGen) CharGen {
+	// independently join two distributions
 	jd := make(map[string]float64)
 	for k1, p1 := range d1.distribution {
 		for k2, p2 := range d2.distribution {
@@ -156,7 +157,7 @@ func NewTree(typ string) *Node {
 		root.Right.Right = &Node{}
 		root.Right.Right.Left = &Node{Value: "g"}
 		root.Right.Right.Right = &Node{Value: "h"}
-		root.CharMap = root.MakeCharMap()
+		root.CharMap = root.MakeStrMap()
 		root.BinaryMap = root.MakeBinaryMap()
 		return root
 	case "3bit-skewed":
@@ -221,7 +222,7 @@ func NewTree(typ string) *Node {
 		}
 		node.Left = &Node{Value: "g"}
 		node.Right = &Node{Value: "h"}
-		root.CharMap = root.MakeCharMap()
+		root.CharMap = root.MakeStrMap()
 		root.BinaryMap = root.MakeBinaryMap()
 		return root
 	default:
@@ -229,7 +230,8 @@ func NewTree(typ string) *Node {
 	}
 }
 
-func (root *Node) MakeCharMap() map[string]string {
+func (root *Node) MakeStrMap() map[string]string {
+	// eg. {"a": "000", "b": "001", ...}
 	charMap := make(map[string]string)
 	var traverse func(node *Node, path string)
 	traverse = func(node *Node, path string) {
@@ -244,6 +246,16 @@ func (root *Node) MakeCharMap() map[string]string {
 	}
 	traverse(root, "")
 	return charMap
+}
+
+func (root *Node) MakeBinaryMap() map[string]string {
+	// eg. {"000": "a", "001": "b", ...}
+	charMap := root.MakeStrMap()
+	binaryMap := make(map[string]string)
+	for char, code := range charMap {
+		binaryMap[code] = char
+	}
+	return binaryMap
 }
 
 func (root *Node) Encode(input string) string {
@@ -269,15 +281,6 @@ func (root *Node) Decode(binary string) string {
 		result += node.Value
 	}
 	return result
-}
-
-func (root *Node) MakeBinaryMap() map[string]string {
-	charMap := root.MakeCharMap()
-	binaryMap := make(map[string]string)
-	for char, code := range charMap {
-		binaryMap[code] = char
-	}
-	return binaryMap
 }
 
 type MinHeap []Node
@@ -315,13 +318,14 @@ func NewHuffmanTree(input string, chunkSize int) Node {
 	for k, v := range frequencyMap {
 		heap.Push(h, Node{k, v, nil, nil, nil, nil})
 	}
+	// 3. build huffman tree
 	for h.Len() > 1 {
 		left := heap.Pop(h).(Node)
 		right := heap.Pop(h).(Node)
 		heap.Push(h, Node{"", left.Count + right.Count, &left, &right, nil, nil})
 	}
 	node := h.Pop().(Node)
-	node.CharMap = node.MakeCharMap()
+	node.CharMap = node.MakeStrMap()
 	node.BinaryMap = node.MakeBinaryMap()
 	return node
 }
