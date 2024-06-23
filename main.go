@@ -70,17 +70,28 @@ func (cg CharGen) Sample(count int) string {
 	return result
 }
 
-func JoinCharGens(d1, d2 CharGen) CharGen {
+func (cg CharGen) Join(cg2 CharGen) CharGen {
 	// independently join two distributions
 	jd := make(map[string]float64)
-	for k1, p1 := range d1.distribution {
-		for k2, p2 := range d2.distribution {
+	for k1, p1 := range cg.distribution {
+		for k2, p2 := range cg2.distribution {
 			joint := k1 + k2
 			p := p1 * p2
 			jd[joint] = p
 		}
 	}
-	cg := CharGen{distribution: jd}
+	newCg := CharGen{distribution: jd}
+	newCg.Normalize()
+	return newCg
+}
+
+func (cg CharGen) Correlate(k string, correlationFactor float64) CharGen {
+	// add dependence to a distribution
+	nd := make(map[string]float64)
+	for k1, p1 := range cg.distribution {
+		nd[k1+k] = p1 * correlationFactor
+	}
+	cg.distribution = nd
 	cg.Normalize()
 	return cg
 }
@@ -266,6 +277,14 @@ func (root *Node) Encode(input string) string {
 	return result
 }
 
+func (root *Node) EncodeChunks(input []string) string {
+	result := ""
+	for _, char := range input {
+		result += root.CharMap[char]
+	}
+	return result
+}
+
 func (root *Node) Decode(binary string) string {
 	result := ""
 	for i := 0; i < len(binary); {
@@ -288,7 +307,6 @@ type MinHeap []Node
 func (h MinHeap) Len() int           { return len(h) }
 func (h MinHeap) Less(i, j int) bool { return h[i].Count < h[j].Count }
 func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
 func (h *MinHeap) Push(x interface{}) {
 	*h = append(*h, x.(Node))
 }
@@ -330,52 +348,68 @@ func NewHuffmanTree(input string, chunkSize int) Node {
 	return node
 }
 
+func splitString(src string) []string {
+	var res []string
+	for i := 0; i < len(src); i += 2 {
+		end := i + 2
+		if end > len(src) {
+			end = len(src)
+		}
+		res = append(res, src[i:end])
+	}
+	return res
+}
+
 func main() {
 	// TODO: fact check the numbers
-
-	// as sampleSize -> Inf, the values calculated values will asymptotically
+	// as sampleSize -> Inf, the calculated values will asymptotically
 	// approach entropy, all of the values below are approximations
 	sampleSize := 10000
 	cg1 := NewCharGen("3bit")
 	src1 := cg1.Sample(sampleSize)
-	fmt.Printf("src1: %s...\n", src1[:50])
 	cg2 := NewCharGen("3bit-skewed")
 	src2 := cg2.Sample(sampleSize)
+	fmt.Printf("src1: %s...\n", src1[:50])
 	fmt.Printf("src2: %s...\n", src2[:50])
 	fmt.Println()
 	// t1 is tree optimized to encode cg1, t2 for cg2
 	// t2(src2) will produce shorter binary strings
 	t1 := NewTree("3bit")
 	t2 := NewTree("3bit-skewed")
-	h1 := float64(len(t1.Encode(src1))) / float64(sampleSize)
-	h2 := float64(len(t2.Encode(src2))) / float64(sampleSize)
-	fmt.Printf("t1.Encode(src1): %s...\n", t1.Encode(src1)[:40])
-	fmt.Printf("len(t1.Encode(src1)): %d\n", int(h1*float64(sampleSize)))
-	fmt.Printf("avg bit length per char (h1): %f\n", h1)
+	encodedSrc1T1 := t1.Encode(src1)
+	encodedSrc2T2 := t2.Encode(src2)
+	encodedSrc2T1 := t1.Encode(src2)
+	encodedSrc1T2 := t2.Encode(src1)
+	h1 := float64(len(encodedSrc1T1)) / float64(sampleSize)
+	h2 := float64(len(encodedSrc2T2)) / float64(sampleSize)
+	h12 := float64(len(encodedSrc2T1)) / float64(sampleSize)
+	h21 := float64(len(encodedSrc1T2)) / float64(sampleSize)
+	printEncodingInfo := func(label string, encoded string, h float64) {
+		fmt.Printf("%s: %s...\n", label, encoded[:40])
+		fmt.Printf("len(%s): %d\n", label, int(h*float64(sampleSize)))
+		fmt.Printf("avg bit length per char (%s): %f\n", label, h)
+		fmt.Println()
+	}
+	printEncodingInfo("t1.Encode(src1)", encodedSrc1T1, h1)
+	printEncodingInfo("t2.Encode(src2)", encodedSrc2T2, h2)
+	printEncodingInfo("t1(src2)", encodedSrc2T1, h12)
+	printEncodingInfo("t2(src1)", encodedSrc1T2, h21)
+	// KL divergence: how much extra bits required
+	// KL(cg1||cg2): extra bits when using t1 (optimized for cg1) to encode src2 (from cg2)
+	// KL(cg2||cg1): extra bits when using t2 (optimized for cg2) to encode src1 (from cg1)
+	fmt.Printf("approximated KL(cg1||cg2): %f\n", h12-h2)
+	fmt.Printf("approximated KL(cg2||cg1): %f\n", h21-h1)
 	fmt.Println()
-	fmt.Printf("t2.Encode(src2): %s...\n", t2.Encode(src2)[:40])
-	fmt.Printf("len(t2.Encode(src2)): %d\n", int(h2*float64(sampleSize)))
-	fmt.Printf("avg bit length per char (h2): %f\n", h2)
 	fmt.Println()
-	// cross-entropy: avg length of t1.Encode(src2) or t2.Encode(src1)
-	// cross-entropy is asymmetric btw
-	h12 := float64(len(t1.Encode(src2))) / float64(sampleSize)
-	h21 := float64(len(t2.Encode(src1))) / float64(sampleSize)
-	fmt.Printf("t1(src2): %s...\n", t1.Encode(src2)[:40])
-	fmt.Printf("len(t1.Encode(src2)): %d\n", int(h12*float64(sampleSize)))
-	fmt.Printf("avg bit length per char (h12): %f\n", h12)
-	fmt.Printf("t2(src1): %s...\n", t2.Encode(src1)[:40])
-	fmt.Printf("len(t2.Encode(src1)): %d\n", int(h21*float64(sampleSize)))
-	fmt.Printf("avg bit length per char (h21): %f\n", h21)
-	// kl divergence: how much extra bits required to
-	// t1.Encode(src2) from t2.Encode(src2) or
-	// t2.Encode(src1) from t1.Encode(src1)
-	fmt.Println()
-	fmt.Printf("approximated KL(P||Q): %f\n", h12-h2)
-	fmt.Printf("approximated KL(Q||P): %f\n", h21-h1)
-	// what if we want to encode src3 with t1 or t2?
-	fmt.Println()
-	cg3 := NewCharGen("nums")
-	src3 := cg3.Sample(sampleSize)
-	fmt.Printf("src3: %s...\n", src3[:50])
+	// joint entropy: if we join two distributions, what's the entropy
+	cg3 := cg1.Join(NewCharGen("nums"))
+	src3 := splitString(cg3.Sample(sampleSize))
+	t3 := NewHuffmanTree(cg3.Sample(sampleSize), 2)
+	fmt.Printf("t3.Encode(src3): %s...\n", t3.EncodeChunks(src3)[:50])
+	// H(cg3) = H(cg1) + H(cg2) if cg1 and cg2 are independent
+	// now lets add dependence/correlation to cg3
+
+	// Commented out as it wasn't being used
+	// h3 := float64(len(t3.Encode(cg3.Sample(sampleSize))) / sampleSize)
+	// fmt.Println(t3.Encode(src3))
 }
